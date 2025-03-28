@@ -5,6 +5,7 @@ require-dbt-version: [">=1.0.0", "<2.0.0"]
 profile: "sandbox"
 
 vars:
+  client_id: "0000" # Client ID
   version: "1.0.0" # Version of Pulse
   currency: "USD" # Currency to be used
   to_timezone: "America/Los_Angeles" # Timezone to convert the data to
