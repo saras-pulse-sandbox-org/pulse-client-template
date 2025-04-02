@@ -12,11 +12,11 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_ID: insightsprod
-  REGION: us-central1
-  REPOSITORY: airflow-images
-  IMAGE_NAME: pulse-airflow
-  AIRFLOW_VERSION: 2.10.5
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'insightsprod'}}
+  REGION: ${{ vars.GCP_ZONE || 'us-central1'}}
+  REPOSITORY: ${{ vars.DOCKER_REPOSITORY || 'airflow-images'}}
+  IMAGE_NAME: ${{ vars.DOCKER_IMAGE_NAME || 'pulse-airflow'}}
+  AIRFLOW_VERSION: ${{ vars.AIRFLOW_VERSION || '2.10.5'}}
 
 jobs:
   build-and-deploy:
