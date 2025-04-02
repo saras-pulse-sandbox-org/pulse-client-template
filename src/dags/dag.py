@@ -1,11 +1,13 @@
+import sys
 from datetime import datetime
 from pathlib import Path
 
 from airflow.decorators import dag, task
 from airflow.operators.python import get_current_context
 
-from config.client_config import ClientConfig
-from utils.helpers import run_dbt_command
+sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
+from utils.config import ClientConfig
+from utils.helpers import publish_dashboard_tables, run_dbt_command
 
 # Load client configuration
 config = ClientConfig()
@@ -34,7 +36,7 @@ def dbt_dag():
         context = get_current_context()
         dag_run_conf = context["dag_run"].conf or {}
 
-        # Get task-specific config, defaulting to empty dict
+        # Get task-specific config
         task_config = dag_run_conf.get("dbt_run", {})
 
         success = run_dbt_command(
@@ -55,7 +57,7 @@ def dbt_dag():
         context = get_current_context()
         dag_run_conf = context["dag_run"].conf or {}
 
-        # Get task-specific config, defaulting to empty dict
+        # Get task-specific config
         task_config = dag_run_conf.get("dbt_test", {})
 
         success = run_dbt_command(
@@ -70,8 +72,22 @@ def dbt_dag():
             raise Exception("dbt test failed")
         return "dbt test completed successfully"
 
-    # Define dependencies
-    dbt_run() >> dbt_test()
+    @task
+    def publish_tables():
+        """Publish tables to dashboard service"""
+        context = get_current_context()
+        run_id = context["run_id"]
+
+        published_tables = publish_dashboard_tables(run_id)
+        print(f"Published {len(published_tables)} tables")
+        return published_tables
+
+    # Define task dependencies
+    dbt_run_task = dbt_run()
+    dbt_test_task = dbt_test()
+    publish_tables_task = publish_tables()
+
+    dbt_run_task >> [dbt_test_task, publish_tables_task]
 
 
 # Instantiate DAG

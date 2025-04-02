@@ -6,6 +6,7 @@ profile: "sandbox"
 
 vars:
   client_id: "0000" # Client ID
+  audit_schema: "pulse_metadata" # Audit schema to be used
   version: "1.0.0" # Version of Pulse
   currency: "USD" # Currency to be used
   to_timezone: "America/Los_Angeles" # Timezone to convert the data to
