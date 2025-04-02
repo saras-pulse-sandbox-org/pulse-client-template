@@ -36,11 +36,10 @@ on:
 
 env:
   INSTANCE_NAME: ${{ github.event.inputs.instance_name || vars.VM_INSTANCE_NAME }}
-  ZONE: ${{ github.event.inputs.zone || vars.GCP_ZONE }}
+  ZONE: ${{ github.event.inputs.zone || vars.VM_ZONE }}
   PROJECT_ID: ${{ github.event.inputs.project_id || vars.GCP_PROJECT_ID }}
   MACHINE_TYPE: ${{ github.event.inputs.machine_type || vars.VM_MACHINE_TYPE }}
   DISK_SIZE: ${{ github.event.inputs.disk_size || vars.VM_DISK_SIZE }}
-  SETUP_DOCKER: ${{ github.event.inputs.setup_docker || vars.SETUP_DOCKER }}
 
 jobs:
   create-vm:
@@ -88,7 +87,6 @@ jobs:
 
   trigger-docker-setup:
     needs: create-vm
-    if: ${{ env.SETUP_DOCKER == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
