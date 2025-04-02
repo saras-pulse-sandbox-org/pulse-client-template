@@ -1,0 +1,83 @@
+name: Build and Deploy Airflow Image
+
+on:
+  push:
+    branches:
+      - infra/main
+    paths:
+      - "docker-compose.yml"
+      - "Dockerfile"
+      - "requirements.txt"
+      - ".github/workflows/build-and-deploy.yml"
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: insightsprod
+  REGION: us-central1
+  REPOSITORY: airflow-images
+  IMAGE_NAME: pulse-airflow
+  AIRFLOW_VERSION: 2.10.5
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Create Artifact Registry repository if not exists
+        run: |
+          # Check if repository exists
+          if ! gcloud artifacts repositories describe ${{ env.REPOSITORY }} \
+            --location=${{ env.REGION }} 2>/dev/null; then
+            echo "Repository ${{ env.REPOSITORY }} does not exist. Creating..."
+
+            # Create repository if it doesn't exist
+            gcloud artifacts repositories create ${{ env.REPOSITORY }} \
+              --repository-format=docker \
+              --location=${{ env.REGION }} \
+              --description="Repository for Airflow images"
+          else
+            echo "Repository ${{ env.REPOSITORY }} already exists."
+          fi
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Build and push image
+        env:
+          REGISTRY_PATH: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}
+        run: |
+          # Build the image
+          docker build -t ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:latest .
+
+          # Tag with date
+          docker tag ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:airflow-${{ env.AIRFLOW_VERSION }}-${{ steps.date.outputs.date }}
+
+          # Push tags
+          docker push ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:airflow-${{ env.AIRFLOW_VERSION }}-${{ steps.date.outputs.date }}
+          docker push ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:latest
+
+          # Output the image URI
+          echo "Image URI: ${{ env.REGISTRY_PATH }}/${{ env.IMAGE_NAME }}:airflow-${{ env.AIRFLOW_VERSION }}-${{ steps.date.outputs.date }}"
