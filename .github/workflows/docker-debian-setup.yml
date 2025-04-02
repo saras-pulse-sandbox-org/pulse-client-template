@@ -1,0 +1,49 @@
+name: Docker Debian Setup
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance_name:
+        description: "VM Instance Name"
+        required: true
+        default: "pulse-vm-instance"
+      zone:
+        description: "GCP Zone"
+        required: true
+        default: "us-central1-f"
+      project_id:
+        description: "GCP Project ID"
+        required: true
+        default: "insightsprod"
+
+jobs:
+  setup-docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - id: "auth"
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ github.event.inputs.project_id }}
+
+      - name: Copy installation script to VM
+        run: |
+          gcloud compute scp scripts/install_docker.sh \
+            ${{ github.event.inputs.instance_name }}:/tmp/install_docker.sh \
+            --zone=${{ github.event.inputs.zone }}
+
+      - name: Execute installation script
+        run: |
+          gcloud compute ssh ${{ github.event.inputs.instance_name }} \
+            --zone=${{ github.event.inputs.zone }} \
+            --command="bash /tmp/install_docker.sh"
