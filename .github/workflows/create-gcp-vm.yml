@@ -41,9 +41,9 @@ jobs:
       contents: read
       actions: write
     outputs:
-      instance_name: ${{ github.event.inputs.instance_name }}
-      zone: ${{ github.event.inputs.zone }}
-      project_id: ${{ github.event.inputs.project_id }}
+      instance_name: ${{ inputs.instance_name || github.event.inputs.instance_name || 'pulse-vm-instance' }}
+      zone: ${{ inputs.zone || github.event.inputs.zone || 'us-central1-f' }}
+      project_id: ${{ inputs.project_id || github.event.inputs.project_id || 'insightsprod' }}
 
     steps:
       - name: Checkout repository
@@ -57,21 +57,27 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ github.event.inputs.project_id }}
+          project_id: ${{ inputs.project_id || github.event.inputs.project_id || 'insightsprod' }}
 
       - name: Create VM Instance
         run: |
-          gcloud compute instances create ${{ github.event.inputs.instance_name }} \
-            --project=${{ github.event.inputs.project_id }} \
-            --zone=${{ github.event.inputs.zone }} \
-            --machine-type=${{ github.event.inputs.machine_type }} \
+          INSTANCE_NAME="${{ inputs.instance_name || github.event.inputs.instance_name || 'pulse-vm-instance' }}"
+          ZONE="${{ inputs.zone || github.event.inputs.zone || 'us-central1-f' }}"
+          PROJECT_ID="${{ inputs.project_id || github.event.inputs.project_id || 'insightsprod' }}"
+          MACHINE_TYPE="${{ inputs.machine_type || github.event.inputs.machine_type || 'e2-standard-8' }}"
+          DISK_SIZE="${{ inputs.disk_size || github.event.inputs.disk_size || '20' }}"
+          
+          gcloud compute instances create $INSTANCE_NAME \
+            --project=$PROJECT_ID \
+            --zone=$ZONE \
+            --machine-type=$MACHINE_TYPE \
             --network-interface=network-tier=PREMIUM,stack-type=IPV4_ONLY,subnet=default \
             --maintenance-policy=MIGRATE \
             --provisioning-model=STANDARD \
             --service-account=165971167981-compute@developer.gserviceaccount.com \
             --scopes=https://www.googleapis.com/auth/cloud-platform \
             --tags=http-server,https-server,lb-health-check \
-            --create-disk=auto-delete=yes,boot=yes,device-name=${{ github.event.inputs.instance_name }},image=projects/debian-cloud/global/images/debian-12-bookworm-v20241009,mode=rw,size=${{ github.event.inputs.disk_size }},type=pd-balanced \
+            --create-disk=auto-delete=yes,boot=yes,device-name=$INSTANCE_NAME,image=projects/debian-cloud/global/images/debian-12-bookworm-v20241009,mode=rw,size=$DISK_SIZE,type=pd-balanced \
             --no-shielded-secure-boot \
             --shielded-vtpm \
             --shielded-integrity-monitoring \
@@ -80,7 +86,7 @@ jobs:
 
   trigger-docker-setup:
     needs: create-vm
-    if: ${{ github.event.inputs.setup_docker == 'true' }}
+    if: ${{ inputs.setup_docker == 'true' || github.event.inputs.setup_docker == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -95,7 +101,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'docker-debian-setup.yml',
-              ref: 'main',
+              ref: 'infra/main',
               inputs: {
                 instance_name: '${{ needs.create-vm.outputs.instance_name }}',
                 zone: '${{ needs.create-vm.outputs.zone }}',

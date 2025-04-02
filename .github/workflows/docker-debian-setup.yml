@@ -39,16 +39,22 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ github.event.inputs.project_id }}
+          project_id: ${{ inputs.project_id || github.event.inputs.project_id || 'insightsprod' }}
 
       - name: Copy installation script to VM
         run: |
+          INSTANCE_NAME="${{ inputs.instance_name || github.event.inputs.instance_name || 'pulse-vm-instance' }}"
+          ZONE="${{ inputs.zone || github.event.inputs.zone || 'us-central1-f' }}"
+          
           gcloud compute scp scripts/install_docker.sh \
-            ${{ github.event.inputs.instance_name }}:/tmp/install_docker.sh \
-            --zone=${{ github.event.inputs.zone }}
+            $INSTANCE_NAME:/tmp/install_docker.sh \
+            --zone=$ZONE
 
       - name: Execute installation script
         run: |
-          gcloud compute ssh ${{ github.event.inputs.instance_name }} \
-            --zone=${{ github.event.inputs.zone }} \
+          INSTANCE_NAME="${{ inputs.instance_name || github.event.inputs.instance_name || 'pulse-vm-instance' }}"
+          ZONE="${{ inputs.zone || github.event.inputs.zone || 'us-central1-f' }}"
+          
+          gcloud compute ssh $INSTANCE_NAME \
+            --zone=$ZONE \
             --command="bash /tmp/install_docker.sh"
