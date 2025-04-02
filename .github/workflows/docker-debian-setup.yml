@@ -1,6 +1,11 @@
 name: Docker Debian Setup
 
 on:
+  push:
+    branches:
+      - infra/main
+    paths:
+      - ".github/workflows/docker-debian-setup.yml"
   workflow_dispatch:
     inputs:
       instance_name:

@@ -1,6 +1,11 @@
 name: Create GCP VM
 
 on:
+  push:
+    branches:
+      - infra/main
+    paths:
+      - ".github/workflows/create-gcp-vm.yml"
   workflow_dispatch:
     inputs:
       instance_name:
