@@ -28,11 +28,6 @@ on:
         description: "GCP Project ID"
         required: true
         default: "insightsprod"
-      setup_docker:
-        description: "Install Docker after VM creation"
-        type: boolean
-        required: true
-        default: false
 
 env:
   INSTANCE_NAME: ${{ github.event.inputs.instance_name || vars.VM_INSTANCE_NAME }}
@@ -66,7 +61,21 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
+      - name: Check if VM already exists
+        id: check-vm
+        run: |
+          if gcloud compute instances describe ${{ env.INSTANCE_NAME }} \
+            --project=${{ env.PROJECT_ID }} \
+            --zone=${{ env.ZONE }} &>/dev/null; then
+            echo "VM ${{ env.INSTANCE_NAME }} already exists in zone ${{ env.ZONE }}."
+            echo "vm_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "VM ${{ env.INSTANCE_NAME }} does not exist in zone ${{ env.ZONE }}. Will create it."
+            echo "vm_exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create VM Instance
+        if: steps.check-vm.outputs.vm_exists == 'false'
         run: |
           gcloud compute instances create ${{ env.INSTANCE_NAME }} \
             --project=${{ env.PROJECT_ID }} \
@@ -84,6 +93,12 @@ jobs:
             --shielded-integrity-monitoring \
             --labels=goog-ec-src=vm_add-gcloud \
             --reservation-affinity=any
+
+      - name: Exit workflow if VM already exists
+        if: steps.check-vm.outputs.vm_exists == 'true'
+        run: |
+          echo "VM ${{ env.INSTANCE_NAME }} already exists. Skipping VM creation."
+          exit 0
 
   trigger-docker-setup:
     needs: create-vm
