@@ -1,25 +1,24 @@
 x-airflow-common: &airflow-common
-  image: us-central1-docker.pkg.dev/insightsprod/airflow-images/de-airflow:latest
+  image: us-central1-docker.pkg.dev/insightsprod/airflow-images/pulse-airflow:latest
+  build: .
   environment: &airflow-common-env
     AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql+psycopg2://pulse-airflow-postgres:cHVsc2UtYWlyZmxvdy1wb3N0Z3Jlcw@postgres/pulse_airflow_db
     AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__CORE__TEST_CONNECTION: "enabled"
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
-    AIRFLOW__WEBSERVER__SHOW_TRIGGER_FORM_IF_NO_PARAMS: "true"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://pulse-airflow-postgres:cHVsc2UtYWlyZmxvdy1wb3N0Z3Jlcw@postgres/pulse_airflow_db
     AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: "10"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    AIRFLOW__SCHEDULER__STANDALONE_DAG_PROCESSOR: "true"
+    AIRFLOW__WEBSERVER__SHOW_TRIGGER_FORM_IF_NO_PARAMS: "true"
     PYTHONPATH: "/opt/airflow"
-    GHUB_PAT: ${GHUB_PAT:-ghp_1234567890}
+    GHUB_PAT: ${GHUB_PAT:-SET_GHUB_PAT_ENV_VAR}
     BQ_PROJECT_ID: ${BQ_PROJECT_ID:-insightsprod}
   volumes:
-    - ${AIRFLOW_PROJ_DIR:-.}/src:/opt/airflow/dags/sandbox_0000_local
     - ${AIRFLOW_PROJ_DIR:-.}/keyfile.json:/opt/airflow/dags/keyfile.json
-    - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
-    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on: &airflow-common-depends-on
     redis:
@@ -31,13 +30,13 @@ services:
   postgres:
     image: postgres:13
     environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
+      POSTGRES_USER: pulse-airflow-postgres
+      POSTGRES_PASSWORD: cHVsc2UtYWlyZmxvdy1wb3N0Z3Jlcw
+      POSTGRES_DB: pulse_airflow_db
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
+      test: ["CMD", "pg_isready", "-U", "pulse-airflow-postgres", "-d", "pulse_airflow_db"]
       interval: 10s
       retries: 5
       start_period: 5s
@@ -58,7 +57,6 @@ services:
   airflow-webserver:
     <<: *airflow-common
     command: webserver
-    platform: linux/amd64
     ports:
       - "8080:8080"
     healthcheck:
@@ -76,7 +74,6 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
-    platform: linux/amd64
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
       interval: 30s
@@ -92,7 +89,6 @@ services:
   airflow-worker:
     <<: *airflow-common
     command: celery worker
-    platform: linux/amd64
     healthcheck:
       test:
         - "CMD-SHELL"
@@ -112,9 +108,17 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
   airflow-init:
     <<: *airflow-common
-    platform: linux/amd64
     entrypoint: /bin/bash
     command:
       - -c
@@ -194,8 +198,6 @@ services:
   flower:
     <<: *airflow-common
     command: celery flower
-    profiles:
-      - flower
     ports:
       - "5555:5555"
     healthcheck:
