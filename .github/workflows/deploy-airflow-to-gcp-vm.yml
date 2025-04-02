@@ -60,6 +60,14 @@ jobs:
             -x ".vscode/*"
           echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
 
+      # Create target directory on VM
+      - name: Create target directory on VM
+        run: |
+          gcloud compute ssh ${{ env.INSTANCE_NAME }} --zone=${{ env.ZONE }} --command='
+            sudo mkdir -p ${{ env.DEPLOY_DIR }} && 
+            sudo chmod 777 ${{ env.DEPLOY_DIR }}
+          '
+
       # Copy files to VM
       - name: Copy files to VM
         run: |
