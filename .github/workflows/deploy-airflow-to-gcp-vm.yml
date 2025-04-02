@@ -3,7 +3,7 @@ name: Deploy Airflow to GCP VM
 on:
   push:
     branches:
-      - indra/main
+      - infra/main
     paths:
       - ".github/workflows/deploy-airflow-to-gcp-vm.yml"
       - "scripts/install_docker.sh"
