@@ -1,0 +1,105 @@
+name: Deploy Airflow to GCP VM
+
+on:
+  push:
+    branches:
+      - indra/main
+    paths:
+      - ".github/workflows/deploy-airflow-to-gcp-vm.yml"
+      - "scripts/install_docker.sh"
+  workflow_dispatch:
+    inputs:
+      vm_name:
+        description: "GCP VM Instance Name"
+        required: true
+        type: string
+        default: "pulse-vm-instance"
+      vm_zone:
+        description: "GCP VM Zone"
+        required: true
+        type: string
+        default: "us-central1-f"
+      project_id:
+        description: "GCP Project ID"
+        required: true
+        type: string
+        default: "insightsprod"
+
+env:
+  INSTANCE_NAME: ${{ github.event.inputs.vm_name || vars.VM_INSTANCE_NAME }}
+  ZONE: ${{ github.event.inputs.vm_zone || vars.VM_ZONE }}
+  PROJECT_ID: ${{ github.event.inputs.project_id || vars.GCP_PROJECT_ID }}
+  DEPLOY_DIR: /opt/airflow
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: "auth"
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      # Create deployment package
+      - name: Create deployment package
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          ZIP_FILE="deploy_${TIMESTAMP}_${GITHUB_RUN_ID}.zip"
+          zip -r $ZIP_FILE . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "*.gitignore" \
+            -x "README.md" \
+            -x ".vscode/*"
+          echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
+
+      # Copy files to VM
+      - name: Copy files to VM
+        run: |
+          gcloud compute scp \
+            ${{ env.ZIP_FILE }} \
+            ${{ env.INSTANCE_NAME }}:${{ env.DEPLOY_DIR }}/${{ env.ZIP_FILE }} \
+            --zone=${{ env.ZONE }}
+
+      # Deploy on VM
+      - name: Deploy on VM
+        run: |
+          gcloud compute ssh ${{ env.INSTANCE_NAME }} --zone=${{ env.ZONE }} --command='
+            # Install unzip if not present
+            sudo apt-get update && \
+            sudo apt-get install -y unzip && \
+            
+            # Navigate to deployment directory
+            cd ~ && \
+            
+            # Unzip deployment package
+            unzip -o '"${{ env.DEPLOY_DIR }}"'/'"${{ env.ZIP_FILE }}"' -d ./app && \
+            
+            # Navigate to app directory
+            cd app && \
+            
+            # Create directories and set permissions
+            mkdir -p ./logs ./dags ./plugins && \
+            sudo chown -R 50000:0 ./logs ./dags ./plugins && \
+            sudo chmod -R 777 ./logs ./dags ./plugins && \
+            
+            # Stop any running containers
+            docker compose down && \
+            
+            # Set AIRFLOW_UID environment variable
+            export AIRFLOW_UID=50000 && \
+            
+            # Build and start containers
+            docker compose up -d --build && \
+            
+            # Cleanup
+            cd ~ && \
+            rm '"${{ env.DEPLOY_DIR }}"'/'"${{ env.ZIP_FILE }}"'
+          '
